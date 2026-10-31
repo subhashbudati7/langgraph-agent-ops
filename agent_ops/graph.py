@@ -6,7 +6,9 @@ from typing import Protocol
 
 from langgraph.graph import END, START, StateGraph
 
+from agent_ops.policies import CostBudget, RetryPolicy, run_worker_with_policy
 from agent_ops.state import AgentState
+from agent_ops.tracing import TraceRecorder
 from agent_ops.workers import Worker
 
 
@@ -41,11 +43,19 @@ class KeywordRouter:
         return "done"
 
 
-def build_graph(router: Router, workers: list[Worker]):
+def build_graph(
+    router: Router,
+    workers: list[Worker],
+    retry: RetryPolicy | None = None,
+    budget: CostBudget | None = None,
+    recorder: TraceRecorder | None = None,
+):
     """Build the supervisor graph for the given router and workers.
 
     Flow: START -> supervisor -> (worker | END); each worker returns to
-    the supervisor, which routes again or finishes.
+    the supervisor, which routes again or finishes. Worker calls run
+    under the retry policy and cost budget, and are traced per node when
+    a recorder is given.
     """
     by_name = {w.name: w for w in workers}
     if len(by_name) != len(workers):
@@ -61,7 +71,13 @@ def build_graph(router: Router, workers: list[Worker]):
     for worker in workers:
         def make_node(w: Worker):
             def node(state: AgentState) -> dict:
-                result = w.run(state["task"])
+                if recorder is not None:
+                    with recorder.span(w.name) as span_record:
+                        result = run_worker_with_policy(w, state["task"], retry, budget)
+                        span_record["tokens"] = result.tokens
+                        span_record["cost_usd"] = result.cost_usd
+                else:
+                    result = run_worker_with_policy(w, state["task"], retry, budget)
                 return {"results": [result.to_dict()]}
 
             return node
