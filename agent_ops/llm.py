@@ -18,7 +18,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from agent_ops.workers import TransientWorkerError, WorkerError
+from agent_ops.workers import TransientWorkerError, WorkerError, WorkerResult
 
 PostFn = Callable[[str, dict[str, str], bytes], tuple[int, bytes]]
 
@@ -92,3 +92,26 @@ class LLMClient:
         """Run one chat completion and return only the text."""
         text, _, _ = self.complete_with_usage(messages)
         return text
+
+
+@dataclass
+class LLMWorker:
+    """A worker agent backed by an LLM client.
+
+    Sends a system prompt plus the task as the user message, and
+    reports the client's real token/cost accounting so the cost
+    budget and trace totals reflect LLM spend, not estimates.
+    """
+
+    name: str
+    client: LLMClient
+    system_prompt: str
+
+    def run(self, task: str) -> WorkerResult:
+        text, tokens, cost = self.client.complete_with_usage(
+            [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": task},
+            ]
+        )
+        return WorkerResult(worker=self.name, output=text, tokens=tokens, cost_usd=cost)

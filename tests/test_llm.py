@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from agent_ops.llm import LLMClient, estimate_tokens
+from agent_ops.llm import LLMClient, LLMWorker, estimate_tokens
 from agent_ops.workers import TransientWorkerError, WorkerError
 
 
@@ -81,3 +81,24 @@ def test_malformed_response_is_worker_error():
     )
     with pytest.raises(WorkerError):
         client.complete([{"role": "user", "content": "hi"}])
+
+
+def test_llm_worker_reports_real_tokens_and_cost():
+    client = LLMClient(
+        model="test-model",
+        api_key="test-key",
+        input_price_per_1k=1.0,
+        output_price_per_1k=2.0,
+        post=_fake_post(
+            {
+                "choices": [{"message": {"content": "done"}}],
+                "usage": {"prompt_tokens": 40, "completion_tokens": 10},
+            }
+        ),
+    )
+    worker = LLMWorker(name="summarizer", client=client, system_prompt="Summarize.")
+    result = worker.run("quarterly report")
+    assert result.worker == "summarizer"
+    assert result.output == "done"
+    assert result.tokens == 50
+    assert result.cost_usd == pytest.approx(40 * 1.0 / 1000 + 10 * 2.0 / 1000)
