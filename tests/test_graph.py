@@ -62,3 +62,20 @@ def test_duplicate_worker_names_rejected():
         assert "unique" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_llm_router_routes_choice_and_done():
+    from agent_ops.graph import LLMRouter
+
+    router = LLMRouter(["researcher", "summarizer"], lambda _: "researcher")
+    assert router.route("search and summarize", []) == "researcher"
+    assert router.route("search and summarize", [{"worker": "researcher"}]) == "done"
+
+
+def test_llm_router_unknown_or_repeat_choice_ends_run():
+    from agent_ops.graph import LLMRouter
+
+    router = LLMRouter(["researcher"], lambda _: "nobody")
+    assert router.route("task", []) == "done"
+    router = LLMRouter(["researcher"], lambda _: "researcher")
+    assert router.route("task", [{"worker": "researcher"}]) == "done"

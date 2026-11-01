@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from langgraph.graph import END, START, StateGraph
@@ -40,6 +41,35 @@ class KeywordRouter:
                 return worker
         if self.default is not None and self.default not in done_workers:
             return self.default
+        return "done"
+
+
+class LLMRouter:
+    """Supervisor router that asks an LLM for the next worker.
+
+    `complete` receives one user message listing the available workers,
+    the task, and the workers already run, and must reply with a worker
+    name or "done". Any unparseable reply, a repeat of an already-run
+    worker, or an unknown name routes to "done" — a confused router
+    ends the run instead of looping forever or dispatching nowhere.
+    """
+
+    def __init__(self, worker_names: list[str], complete: Callable[[list[dict]], str]):
+        self.worker_names = worker_names
+        self.complete = complete
+
+    def route(self, task: str, results: list[dict]) -> str:
+        done_workers = {r["worker"] for r in results}
+        available = [w for w in self.worker_names if w not in done_workers]
+        prompt = (
+            f"Task: {task}\n"
+            f"Available workers: {', '.join(available) or 'none'}\n"
+            f"Already run: {', '.join(sorted(done_workers)) or 'none'}\n"
+            "Reply with exactly one available worker name, or 'done' if the task is complete."
+        )
+        choice = self.complete([{"role": "user", "content": prompt}]).strip()
+        if choice in available:
+            return choice
         return "done"
 
 
