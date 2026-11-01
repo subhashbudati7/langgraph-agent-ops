@@ -79,6 +79,7 @@ def build_graph(
     retry: RetryPolicy | None = None,
     budget: CostBudget | None = None,
     recorder: TraceRecorder | None = None,
+    estimate_tokens: Callable[[str], int] | None = None,
 ):
     """Build the supervisor graph for the given router and workers.
 
@@ -103,11 +104,17 @@ def build_graph(
             def node(state: AgentState) -> dict:
                 if recorder is not None:
                     with recorder.span(w.name) as span_record:
-                        result = run_worker_with_policy(w, state["task"], retry, budget)
+                        result = run_worker_with_policy(
+                            w, state["task"], retry, budget,
+                            estimate_tokens=estimate_tokens,
+                        )
                         span_record["tokens"] = result.tokens
                         span_record["cost_usd"] = result.cost_usd
                 else:
-                    result = run_worker_with_policy(w, state["task"], retry, budget)
+                    result = run_worker_with_policy(
+                        w, state["task"], retry, budget,
+                        estimate_tokens=estimate_tokens,
+                    )
                 return {"results": [result.to_dict()]}
 
             return node

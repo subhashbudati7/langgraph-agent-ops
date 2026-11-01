@@ -57,3 +57,28 @@ def test_budget_cost_cap():
     worker = FakeWorker(name="w", tokens=1, cost_usd=0.002)
     with pytest.raises(BudgetExceeded, match="cost budget"):
         run_worker_with_policy(worker, "task", budget=budget, sleep=lambda _: None)
+
+
+def test_precheck_fails_fast_without_calling_worker():
+    from agent_ops.policies import BudgetExceeded, CostBudget, run_worker_with_policy
+    from agent_ops.workers import FakeWorker
+
+    worker = FakeWorker(name="w", tokens=10)
+    budget = CostBudget(max_tokens=20)
+    with pytest.raises(BudgetExceeded):
+        run_worker_with_policy(worker, "task", budget=budget, estimate_tokens=lambda _: 50)
+    assert worker.calls == 0
+    assert budget.tokens_used == 0
+
+
+def test_precheck_passes_then_postcheck_records():
+    from agent_ops.policies import CostBudget, run_worker_with_policy
+    from agent_ops.workers import FakeWorker
+
+    worker = FakeWorker(name="w", tokens=10)
+    budget = CostBudget(max_tokens=20)
+    result = run_worker_with_policy(
+        worker, "task", budget=budget, estimate_tokens=lambda _: 5
+    )
+    assert result.tokens == 10
+    assert budget.tokens_used == 10
