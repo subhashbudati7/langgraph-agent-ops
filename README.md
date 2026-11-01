@@ -31,6 +31,13 @@ task ──► guardrails (input) ──► supervisor ──► worker ──�
 - **Workers** (`agent_ops/workers.py`): a `Worker` protocol returning a
   `WorkerResult` (output, tokens used, cost). `FakeWorker` stands in for
   real agents in tests and demos; it never calls an LLM.
+- **LLM workers** (`agent_ops/llm.py`): `LLMClient` (stdlib-only,
+  OpenAI-compatible chat completions with usage/cost accounting and
+  429/5xx mapped to transient errors), `LLMWorker`, and
+  researcher/summarizer/critic presets. `LLMRouter` (`graph.py`) asks an
+  LLM for the next worker and ends the run on any unparseable reply.
+  `CostBudget.precheck` fails fast on an over-budget estimate before a
+  call ever bills.
 - **Policies** (`agent_ops/policies.py`): `RetryPolicy` (max attempts,
   exponential backoff) and `CostBudget` (token and dollar caps) enforced
   per run, with `BudgetExceeded` raised before a call that would blow
@@ -53,7 +60,9 @@ task ──► guardrails (input) ──► supervisor ──► worker ──�
 | Cost caps | `CostBudget` per run | Done |
 | Guardrails | Input/output checks | Done |
 | Tracing | JSONL spans per node | Done |
-| Real LLM workers | OpenAI-compatible client | Planned |
+| Real LLM workers | OpenAI-compatible client | Done |
+| LLM routing | `LLMRouter` with fail-to-done | Done |
+| Pre-call budget estimate | `CostBudget.precheck` | Done |
 | Live demo | Hosted API | Planned (Nov 27 deploy) |
 
 ## Run it
@@ -64,6 +73,15 @@ python scripts/demo.py --task "summarize: quarterly report"
 python -m pytest
 ruff check .
 ```
+
+With an OpenAI-compatible key, the same ops layer runs real workers:
+
+```bash
+LLM_API_KEY=... LLM_MODEL=gpt-4o-mini python scripts/demo_llm.py
+```
+
+`demo_llm.py` refuses to run without `LLM_API_KEY` set, and never logs
+the key.
 
 ## Status
 
