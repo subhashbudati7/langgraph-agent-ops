@@ -1,0 +1,94 @@
+"""OpenAI-compatible LLM client for real worker agents.
+
+Uses only the standard library for HTTP, so the package gains no new
+runtime dependency. The client is deliberately small: one chat-completion
+call, usage accounting, and error mapping onto the worker error types
+so the retry policy treats rate limits and 5xx as transient.
+
+A `post` callable can be injected for tests (and for users who want
+their own transport); the default transport posts JSON with urllib.
+No API key is ever logged: error messages carry the HTTP status only.
+"""
+
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass, field
+
+from agent_ops.workers import TransientWorkerError, WorkerError
+
+PostFn = Callable[[str, dict[str, str], bytes], tuple[int, bytes]]
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate (~4 chars/token) for budgeting before a call."""
+    return max(1, len(text) // 4)
+
+
+def _default_post(url: str, headers: dict[str, str], body: bytes) -> tuple[int, bytes]:
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.status, response.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+    except urllib.error.URLError as exc:
+        raise TransientWorkerError(f"LLM request failed: {exc.reason}") from exc
+
+
+@dataclass
+class LLMClient:
+    """Minimal OpenAI-compatible chat client.
+
+    `input_price_per_1k` / `output_price_per_1k` are USD per 1,000
+    tokens; set them from the model provider's pricing page. When the
+    API reports usage, real token counts are used; otherwise the
+    estimate above fills in, so cost accounting never silently drops
+    to zero.
+    """
+
+    model: str
+    api_key: str
+    base_url: str = "https://api.openai.com/v1"
+    input_price_per_1k: float = 0.0
+    output_price_per_1k: float = 0.0
+    post: PostFn = field(default=_default_post, repr=False)
+
+    def complete_with_usage(self, messages: list[dict]) -> tuple[str, int, float]:
+        """Run one chat completion; return (text, total_tokens, cost_usd)."""
+        payload = json.dumps({"model": self.model, "messages": messages}).encode()
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        status, body = self.post(f"{self.base_url}/chat/completions", headers, payload)
+        if status == 429 or status >= 500:
+            raise TransientWorkerError(f"LLM request failed with HTTP {status}")
+        if status != 200:
+            raise WorkerError(f"LLM request failed with HTTP {status}")
+        try:
+            data = json.loads(body)
+            text = data["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise WorkerError("LLM response was not a chat completion") from exc
+        usage = data.get("usage") or {}
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        if prompt_tokens is None or completion_tokens is None:
+            tokens = estimate_tokens(" ".join(m["content"] for m in messages) + text)
+            cost = tokens * (self.input_price_per_1k / 1000)
+            return text, tokens, cost
+        tokens = prompt_tokens + completion_tokens
+        cost = (
+            prompt_tokens * self.input_price_per_1k / 1000
+            + completion_tokens * self.output_price_per_1k / 1000
+        )
+        return text, tokens, cost
+
+    def complete(self, messages: list[dict]) -> str:
+        """Run one chat completion and return only the text."""
+        text, _, _ = self.complete_with_usage(messages)
+        return text
