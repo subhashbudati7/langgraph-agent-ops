@@ -102,3 +102,19 @@ def test_llm_worker_reports_real_tokens_and_cost():
     assert result.output == "done"
     assert result.tokens == 50
     assert result.cost_usd == pytest.approx(40 * 1.0 / 1000 + 10 * 2.0 / 1000)
+
+
+def test_preset_workers_carry_distinct_roles():
+    from agent_ops.llm import critic_worker, researcher_worker, summarizer_worker
+
+    client = LLMClient(
+        model="test-model",
+        api_key="test-key",
+        post=_fake_post({"choices": [{"message": {"content": "ok"}}]}),
+    )
+    workers = [researcher_worker(client), summarizer_worker(client), critic_worker(client)]
+    assert [w.name for w in workers] == ["researcher", "summarizer", "critic"]
+    prompts = {w.system_prompt for w in workers}
+    assert len(prompts) == 3  # each preset has its own system prompt
+    for worker in workers:
+        assert worker.run("task").output == "ok"

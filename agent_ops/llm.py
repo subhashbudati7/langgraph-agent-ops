@@ -115,3 +115,39 @@ class LLMWorker:
             ]
         )
         return WorkerResult(worker=self.name, output=text, tokens=tokens, cost_usd=cost)
+
+
+def researcher_worker(client: LLMClient) -> LLMWorker:
+    """Gather facts relevant to the task; report findings, not conclusions."""
+    return LLMWorker(
+        name="researcher",
+        client=client,
+        system_prompt=(
+            "You are a researcher. Gather the key facts relevant to the task "
+            "and report them as concise bullet points with no conclusions."
+        ),
+    )
+
+
+def summarizer_worker(client: LLMClient) -> LLMWorker:
+    """Condense prior findings into a short summary for the requester."""
+    return LLMWorker(
+        name="summarizer",
+        client=client,
+        system_prompt=(
+            "You are a summarizer. Condense the task and any findings into a "
+            "short summary a busy reader can act on."
+        ),
+    )
+
+
+def critic_worker(client: LLMClient) -> LLMWorker:
+    """Check a draft for gaps, unsupported claims, and missing steps."""
+    return LLMWorker(
+        name="critic",
+        client=client,
+        system_prompt=(
+            "You are a critic. Review the task output for gaps, unsupported "
+            "claims, and missing steps, and list each issue briefly."
+        ),
+    )
