@@ -8,6 +8,7 @@ from typing import Protocol
 
 from langgraph.graph import END, START, StateGraph
 
+from agent_ops.guardrails import check_output
 from agent_ops.policies import CostBudget, RetryPolicy, run_worker_with_policy
 from agent_ops.state import AgentState
 from agent_ops.tracing import TraceRecorder
@@ -155,6 +156,7 @@ def build_graph(
                             w, state["task"], retry, budget,
                             estimate_tokens=estimate_tokens,
                         )
+                        check_output(result.output)
                         span_record["tokens"] = result.tokens
                         span_record["cost_usd"] = result.cost_usd
                 else:
@@ -162,6 +164,7 @@ def build_graph(
                         w, state["task"], retry, budget,
                         estimate_tokens=estimate_tokens,
                     )
+                    check_output(result.output)
                 return {"results": [result.to_dict()]}
 
             return node

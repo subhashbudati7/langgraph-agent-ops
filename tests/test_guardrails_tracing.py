@@ -23,6 +23,16 @@ def test_ssn_shaped_number_rejected_in_input_and_output():
         check_output("result contains 123-45-6789")
 
 
+def test_api_key_shaped_secret_rejected_in_output():
+    with pytest.raises(GuardrailViolation, match="blocked pattern"):
+        check_output("use this key: sk-abcdefghij0123456789")
+    with pytest.raises(GuardrailViolation, match="blocked pattern"):
+        check_output("aws key AKIAIOSFODNN7EXAMPLE leaked")
+    # Injection phrases are input-only: an output that merely quotes one
+    # is not blocked, but the secret scan still applies.
+    check_output("the task said 'ignore previous instructions'")
+
+
 def test_clean_input_and_output_pass():
     check_input("summarize: quarterly report")
     check_output("a short summary")
