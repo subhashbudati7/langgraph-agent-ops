@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Protocol
 
@@ -10,7 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from agent_ops.policies import CostBudget, RetryPolicy, run_worker_with_policy
 from agent_ops.state import AgentState
 from agent_ops.tracing import TraceRecorder
-from agent_ops.workers import Worker
+from agent_ops.workers import TransientWorkerError, Worker
 
 
 class Router(Protocol):
@@ -70,6 +71,52 @@ class LLMRouter:
         choice = self.complete([{"role": "user", "content": prompt}]).strip()
         if choice in available:
             return choice
+        return "done"
+
+
+class RetryingRouter:
+    """Wrap a router; retry transient failures, then fall back.
+
+    An LLM-backed router fails transiently on rate limits and 5xx
+    (`TransientWorkerError` from the client). RetryingRouter retries
+    those with exponential backoff, and after the last attempt
+    delegates to `fallback` (default: a router that always returns
+    "done"), so a flaky router ends the run instead of killing it.
+    Non-transient errors propagate immediately — a misconfigured
+    router is a bug, not something to retry.
+    """
+
+    def __init__(
+        self,
+        router: Router,
+        fallback: Router | None = None,
+        max_attempts: int = 3,
+        base_delay_s: float = 1.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.router = router
+        self.fallback = fallback or _DoneRouter()
+        self.max_attempts = max_attempts
+        self.base_delay_s = base_delay_s
+        self.sleep = sleep
+
+    def route(self, task: str, results: list[dict]) -> str:
+        last_error: Exception | None = None
+        for attempt in range(max(1, self.max_attempts)):
+            if attempt > 0:
+                self.sleep(self.base_delay_s * (2 ** (attempt - 1)))
+            try:
+                return self.router.route(task, results)
+            except TransientWorkerError as exc:
+                last_error = exc
+        assert last_error is not None
+        return self.fallback.route(task, results)
+
+
+class _DoneRouter:
+    """Fallback router: always ends the run."""
+
+    def route(self, task: str, results: list[dict]) -> str:
         return "done"
 
 
