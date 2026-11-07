@@ -105,16 +105,34 @@ def test_llm_worker_reports_real_tokens_and_cost():
 
 
 def test_preset_workers_carry_distinct_roles():
-    from agent_ops.llm import critic_worker, researcher_worker, summarizer_worker
+    from agent_ops.llm import (
+        critic_worker,
+        editor_worker,
+        planner_worker,
+        researcher_worker,
+        summarizer_worker,
+    )
 
     client = LLMClient(
         model="test-model",
         api_key="test-key",
         post=_fake_post({"choices": [{"message": {"content": "ok"}}]}),
     )
-    workers = [researcher_worker(client), summarizer_worker(client), critic_worker(client)]
-    assert [w.name for w in workers] == ["researcher", "summarizer", "critic"]
+    workers = [
+        researcher_worker(client),
+        summarizer_worker(client),
+        critic_worker(client),
+        planner_worker(client),
+        editor_worker(client),
+    ]
+    assert [w.name for w in workers] == [
+        "researcher",
+        "summarizer",
+        "critic",
+        "planner",
+        "editor",
+    ]
     prompts = {w.system_prompt for w in workers}
-    assert len(prompts) == 3  # each preset has its own system prompt
+    assert len(prompts) == 5  # each preset has its own system prompt
     for worker in workers:
         assert worker.run("task").output == "ok"

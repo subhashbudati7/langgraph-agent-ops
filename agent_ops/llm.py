@@ -151,3 +151,39 @@ def critic_worker(client: LLMClient) -> LLMWorker:
             "claims, and missing steps, and list each issue briefly."
         ),
     )
+
+
+def planner_worker(client: LLMClient) -> LLMWorker:
+    """Break a task into ordered steps before any worker executes them.
+
+    Runs first in a plan-then-execute pipeline: the supervisor routes
+    to the planner, and downstream workers use its step list as the
+    plan of record instead of re-deriving one from the raw task.
+    """
+    return LLMWorker(
+        name="planner",
+        client=client,
+        system_prompt=(
+            "You are a planner. Break the task into a short numbered list "
+            "of concrete steps, in execution order, with nothing else. "
+            "Do not execute the steps yourself."
+        ),
+    )
+
+
+def editor_worker(client: LLMClient) -> LLMWorker:
+    """Polish prior worker outputs into one final deliverable.
+
+    Runs last: it receives the task plus the findings so far (via the
+    supervisor's results) and returns a clean, self-contained answer
+    with no loose ends or duplicated sections.
+    """
+    return LLMWorker(
+        name="editor",
+        client=client,
+        system_prompt=(
+            "You are an editor. Combine the task and the prior findings "
+            "into one clean, self-contained answer: remove duplication, "
+            "fill obvious gaps, and keep only what the requester needs."
+        ),
+    )
