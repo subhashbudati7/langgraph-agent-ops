@@ -72,6 +72,8 @@ task ──► guardrails (input) ──► supervisor ──► worker ──�
 | Cost caps | `CostBudget` per run | Done |
 | Guardrails | Input/output checks | Done |
 | Tracing | JSONL spans per node | Done |
+| Trace summarizer | Per-run/node totals from JSONL (`scripts/summarize_trace.py`) | Done |
+| Run report | JSON report per run (`scripts/run_report.py`) | Planned |
 | Real LLM workers | OpenAI-compatible client | Done |
 | LLM routing | `LLMRouter` with fail-to-done | Done |
 | Router retry | `RetryingRouter`, backoff + fallback | Done |
@@ -85,9 +87,14 @@ task ──► guardrails (input) ──► supervisor ──► worker ──�
 ```bash
 pip install -e ".[dev]"
 python scripts/demo.py --task "summarize: quarterly report"
+python scripts/summarize_trace.py --trace-path traces/demo.jsonl
 python -m pytest
 ruff check .
 ```
+
+Summarize any JSONL trace after a run — per run and per worker node,
+with `--json` for machine-readable output and `--run-id` to filter to
+one run:
 
 Serve the same graph over HTTP (offline stack, no key needed):
 
