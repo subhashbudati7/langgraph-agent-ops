@@ -18,6 +18,7 @@ class RunOutcome:
     results: list[dict] = field(default_factory=list)
     error: str | None = None
     trace_totals: dict | None = None
+    run_id: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -43,7 +44,8 @@ def run_task(
     re-check of results handed back to the caller.
     """
     check_input(task)
-    recorder = TraceRecorder(trace_path, run_id=str(uuid.uuid4())) if trace_path else None
+    run_id = str(uuid.uuid4()) if trace_path else None
+    recorder = TraceRecorder(trace_path, run_id=run_id) if trace_path else None
     app = build_graph(router, workers, retry=retry, budget=budget, recorder=recorder)
     try:
         final = app.invoke({"task": task, "route": "", "results": [], "error": None})
@@ -54,8 +56,10 @@ def run_task(
         return RunOutcome(
             task=task, error=str(exc),
             trace_totals=recorder.totals() if recorder else None,
+            run_id=run_id,
         )
     return RunOutcome(
         task=task, results=results,
         trace_totals=recorder.totals() if recorder else None,
+        run_id=run_id,
     )
