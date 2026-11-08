@@ -136,3 +136,12 @@ enforced per worker node (PII + leaked-key scan), planner/editor
 worker presets, and a FastAPI `/run` endpoint with an offline-first
 serve script. 45 tests passing, ruff clean; the API was verified
 live against the offline stack.
+
+Week 3 (Nov 8, 2026): observability — trace summarizer
+(`agent_ops/summary.py` + `scripts/summarize_trace.py`, per-run and
+per-node totals, skips malformed lines), JSON run reports
+(`agent_ops/report.py` + `scripts/run_report.py`, one report per
+run), `scripts/check_release.py` one-command pre-merge gate, and a
+`DEPLOY.md` runbook for the Nov 27 deploy. 64 tests passing, ruff
+clean; API smoke re-verified live (`/health` 200, `/run` 200 with
+two worker results, no error).
