@@ -73,7 +73,7 @@ task ──► guardrails (input) ──► supervisor ──► worker ──�
 | Guardrails | Input/output checks | Done |
 | Tracing | JSONL spans per node | Done |
 | Trace summarizer | Per-run/node totals from JSONL (`scripts/summarize_trace.py`) | Done |
-| Run report | JSON report per run (`scripts/run_report.py`) | Planned |
+| Run report | JSON report per run (`scripts/run_report.py`) | Done |
 | Real LLM workers | OpenAI-compatible client | Done |
 | LLM routing | `LLMRouter` with fail-to-done | Done |
 | Router retry | `RetryingRouter`, backoff + fallback | Done |
@@ -95,6 +95,16 @@ ruff check .
 Summarize any JSONL trace after a run — per run and per worker node,
 with `--json` for machine-readable output and `--run-id` to filter to
 one run:
+
+```bash
+python scripts/run_report.py
+# run <id>: ok, 2 workers, 20 tokens, $0.002000, 0.093 ms
+# report: reports/<id>.json
+```
+
+`run_report.py` runs the offline demo stack and writes a `RunReport`
+JSON (outcome + per-node trace summary) to `reports/<run_id>.json`;
+reports are git-ignored run artifacts.
 
 Serve the same graph over HTTP (offline stack, no key needed):
 
